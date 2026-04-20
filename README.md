@@ -52,6 +52,11 @@ Sources are applied in order. Later sources overwrite earlier ones, so
 `Config.from_sources([DotEnvSource(".env"), EnvSource()])` lets real environment variables
 win over `.env`.
 
+All sources must return `Mapping[str, str]`: configuration keys and values are strings.
+`MappingSource`, `EnvSource`, `DotEnvSource`, and custom sources loaded through
+`Config.from_sources()` fail early with `MLPConfigSourceError` if a key or value is not a
+string.
+
 `DotEnvSource` uses `python-dotenv`, does not mutate `os.environ`, and raises a clear
 `MLPConfigSourceError` if the optional dependency is not installed.
 
@@ -96,6 +101,10 @@ Structured accessors return immutable data:
 - dicts become `types.MappingProxyType`
 - sets become frozensets
 - nested structures are frozen recursively
+
+Public keys passed to accessors must be non-empty strings. Prefixes may be empty, but
+must also be strings. Invalid keys or prefixes raise `MLPConfigValueError` before any
+lookup is attempted.
 
 ## Access Ledger And Snapshot
 
@@ -205,4 +214,3 @@ python -m ruff check .
 python -m pyright
 python -m build
 ```
-
