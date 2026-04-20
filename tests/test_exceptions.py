@@ -36,3 +36,21 @@ def test_frozen_error_is_clear() -> None:
     with pytest.raises(MLPConfigFrozenError, match="Configuration is frozen"):
         config.require_str("A")
 
+
+def test_public_keys_must_be_non_empty_strings() -> None:
+    config = Config.from_mapping({"A": "1"})
+
+    with pytest.raises(MLPConfigValueError, match="config key must be a non-empty string"):
+        config.require_str("")  # type: ignore[arg-type]
+
+    with pytest.raises(MLPConfigValueError, match="config key must be a non-empty string"):
+        config.require_str(object())  # type: ignore[arg-type]
+
+
+def test_prefix_must_be_string() -> None:
+    with pytest.raises(MLPConfigValueError, match="config prefix must be a string"):
+        Config.from_mapping({"A": "1"}, prefix=object())  # type: ignore[arg-type]
+
+    config = Config.from_mapping({"A": "1"})
+    with pytest.raises(MLPConfigValueError, match="config prefix must be a string"):
+        config.prefixed(object())  # type: ignore[arg-type]

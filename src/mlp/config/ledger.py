@@ -20,8 +20,7 @@ class AccessRecord:
     found: bool
     status: AccessStatus
     sensitive: bool
-    raw_value: str | None
-    value_repr: object | None
+    display_value: object | None
     error: str | None
 
 
@@ -52,8 +51,7 @@ class AccessLedger:
         found: bool,
         status: AccessStatus,
         sensitive: bool,
-        raw_value: str | None,
-        value_repr: object | None,
+        display_value: object | None,
         error: str | None,
     ) -> None:
         if sensitive:
@@ -67,8 +65,7 @@ class AccessLedger:
             found=found,
             status=status,
             sensitive=final_sensitive,
-            raw_value=raw_value,
-            value_repr=render_value(value_repr, sensitive=final_sensitive),
+            display_value=display_value,
             error=error,
         )
 
@@ -81,10 +78,9 @@ class AccessLedger:
                 "expected_type": record.expected_type,
                 "required": record.required,
                 "sensitive": sensitive,
-                "value": render_value(record.raw_value, sensitive=sensitive),
+                "value": render_value(record.display_value, sensitive=sensitive),
             }
             if record.error is not None:
                 item["error"] = record.error
             result[resolved_key] = item
         return result
-

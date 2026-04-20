@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Mapping, Sequence, TypeVar, cast
+from typing import Any, Callable, Mapping, Sequence, TypeVar, cast
 
 from .exceptions import (
     MLPConfigFrozenError,
     MLPConfigMissingError,
+    MLPConfigSourceError,
     MLPConfigValueError,
 )
 from .immutable import deep_freeze
@@ -38,13 +39,14 @@ class Config:
         case_sensitive: bool = True,
         copy_values: bool = True,
     ) -> None:
+        _validate_prefix(prefix)
         self._case_sensitive = case_sensitive
         if case_sensitive and not copy_values:
             self._values = cast(dict[str, str], values)
         elif case_sensitive:
-            self._values = dict(values)
+            self._values = _validate_values(values)
         else:
-            self._values = {key.upper(): value for key, value in values.items()}
+            self._values = {key.upper(): value for key, value in _validate_values(values).items()}
         self._prefix = prefix if case_sensitive else prefix.upper()
         self._ledger = ledger if ledger is not None else AccessLedger()
         self._frozen_state = frozen_state if frozen_state is not None else _FrozenState()
@@ -57,7 +59,7 @@ class Config:
     def from_sources(cls, sources: Sequence[ConfigSource], *, prefix: str = "") -> Config:
         values: dict[str, str] = {}
         for source in sources:
-            values.update(source.load())
+            values.update(_validate_values(source.load()))
         return cls(values, prefix=prefix)
 
     @classmethod
@@ -78,6 +80,7 @@ class Config:
         self._frozen_state.frozen = True
 
     def prefixed(self, prefix: str) -> Config:
+        _validate_prefix(prefix)
         return Config(
             self._values,
             prefix=f"{self._prefix}{prefix if self._case_sensitive else prefix.upper()}",
@@ -90,11 +93,11 @@ class Config:
     def snapshot(self) -> dict[str, object]:
         return self._ledger.snapshot()
 
-    def has(self, key: str) -> bool:
+    def has(self, key: str, *, sensitive: bool | None = None) -> bool:
         resolved_key = self._resolve_key(key)
         self._ensure_allowed(resolved_key)
         found = resolved_key in self._values
-        sensitive = self._ledger.resolve_sensitive(resolved_key, None)
+        final_sensitive = self._ledger.resolve_sensitive(resolved_key, sensitive)
         self._ledger.record(
             key=key,
             resolved_key=resolved_key,
@@ -102,9 +105,8 @@ class Config:
             required=False,
             found=found,
             status="ok" if found else "missing",
-            sensitive=sensitive,
-            raw_value=self._values.get(resolved_key),
-            value_repr=found,
+            sensitive=final_sensitive,
+            display_value=found,
             error=None,
         )
         return found
@@ -391,8 +393,7 @@ class Config:
                 found=False,
                 status="missing",
                 sensitive=final_sensitive,
-                raw_value=None,
-                value_repr=default,
+                display_value=default,
                 error="missing required value" if required else None,
             )
             if required:
@@ -407,8 +408,7 @@ class Config:
             found=True,
             status="invalid",
             sensitive=final_sensitive,
-            raw_value=raw_value,
-            value_repr=None,
+            display_value=raw_value,
             error=f"invalid {expected_type}",
         )
 
@@ -432,13 +432,13 @@ class Config:
             found=True,
             status="ok",
             sensitive=final_sensitive,
-            raw_value=raw_value,
-            value_repr=value,
+            display_value=raw_value,
             error=None,
         )
         return value
 
     def _resolve_key(self, key: str) -> str:
+        _validate_key(key)
         resolved_key = f"{self._prefix}{key}"
         return resolved_key if self._case_sensitive else resolved_key.upper()
 
@@ -503,3 +503,22 @@ def _parse_json_list(raw: str) -> tuple[object, ...]:
     if not isinstance(value, list):
         raise ValueError("expected JSON list")
     return tuple(deep_freeze(item) for item in value)
+
+
+def _validate_key(key: str) -> None:
+    if not isinstance(key, str) or key == "":
+        raise MLPConfigValueError("config key must be a non-empty string")
+
+
+def _validate_prefix(prefix: str) -> None:
+    if not isinstance(prefix, str):
+        raise MLPConfigValueError("config prefix must be a string")
+
+
+def _validate_values(values: Mapping[Any, Any]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for key, value in values.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise MLPConfigSourceError("config values must be strings")
+        result[key] = value
+    return result

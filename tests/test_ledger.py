@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from mlp.config import Config, MLPConfigValueError
@@ -39,6 +41,27 @@ def test_snapshot_only_includes_accessed_keys() -> None:
     assert list(config.snapshot()) == ["A"]
 
 
+def test_has_records_presence_without_leaking_value() -> None:
+    config = Config.from_mapping({"DB_URL": "postgres://secret"})
+
+    assert config.has("DB_URL") is True
+
+    snapshot = cast(dict[str, object], config.snapshot()["DB_URL"])
+    assert snapshot["expected_type"] == "presence"
+    assert snapshot["value"] is True
+    assert "postgres://secret" not in str(snapshot)
+
+
+def test_has_accepts_sensitive_policy() -> None:
+    config = Config.from_mapping({"URL": "postgres://secret"})
+
+    assert config.has("URL", sensitive=True) is True
+
+    snapshot = cast(dict[str, object], config.snapshot()["URL"])
+    assert snapshot["sensitive"] is True
+    assert snapshot["value"] == "<redacted>"
+
+
 def test_sensitive_true_and_heuristic_redact() -> None:
     config = Config.from_mapping({"URL": "postgres://secret", "API_TOKEN": "token"})
 
@@ -69,4 +92,3 @@ def test_later_sensitive_true_redacts_previous_visible_value() -> None:
 
     assert config.snapshot()["URL"]["sensitive"] is True  # type: ignore[index]
     assert config.snapshot()["URL"]["value"] == "<redacted>"  # type: ignore[index]
-

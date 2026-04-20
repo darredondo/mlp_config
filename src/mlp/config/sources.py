@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Mapping, Protocol
+from typing import Any, Mapping, Protocol
 
 from .exceptions import MLPConfigSourceError
 
@@ -21,14 +21,14 @@ class EnvSource:
         self._environ = environ
 
     def load(self) -> Mapping[str, str]:
-        return dict(os.environ if self._environ is None else self._environ)
+        return _validate_string_mapping(os.environ if self._environ is None else self._environ)
 
 
 class MappingSource:
     """Read values from an explicit mapping."""
 
     def __init__(self, values: Mapping[str, str]) -> None:
-        self._values = dict(values)
+        self._values = _validate_string_mapping(values)
 
     def load(self) -> Mapping[str, str]:
         return dict(self._values)
@@ -56,4 +56,15 @@ class DotEnvSource:
             ) from exc
 
         loaded = dotenv_values(self._path)
-        return {key: value for key, value in loaded.items() if value is not None}
+        return _validate_string_mapping(
+            {key: value for key, value in loaded.items() if value is not None}
+        )
+
+
+def _validate_string_mapping(values: Mapping[Any, Any]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for key, value in values.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise MLPConfigSourceError("config values must be strings")
+        result[key] = value
+    return result

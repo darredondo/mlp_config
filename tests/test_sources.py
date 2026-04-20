@@ -18,9 +18,31 @@ def test_mapping_source_copies_values() -> None:
     assert source.load() == {"A": "1"}
 
 
+def test_mapping_source_requires_string_keys_and_values() -> None:
+    with pytest.raises(MLPConfigSourceError, match="config values must be strings"):
+        MappingSource({"PORT": 123})  # type: ignore[arg-type]
+
+    with pytest.raises(MLPConfigSourceError, match="config values must be strings"):
+        MappingSource({123: "PORT"})  # type: ignore[dict-item]
+
+
+def test_env_source_requires_string_keys_and_values() -> None:
+    with pytest.raises(MLPConfigSourceError, match="config values must be strings"):
+        EnvSource({"PORT": 123}).load()  # type: ignore[dict-item]
+
+
 def test_source_precedence_later_sources_win() -> None:
     config = Config.from_sources([MappingSource({"A": "from-file"}), MappingSource({"A": "env"})])
     assert config.require_str("A") == "env"
+
+
+def test_from_sources_validates_custom_source_values() -> None:
+    class BadSource:
+        def load(self):
+            return {"PORT": 123}
+
+    with pytest.raises(MLPConfigSourceError, match="config values must be strings"):
+        Config.from_sources([BadSource()])  # type: ignore[list-item]
 
 
 def test_dotenv_missing_optional_returns_empty(tmp_path) -> None:
@@ -46,4 +68,3 @@ def test_dotenv_dependency_missing_has_clear_message(tmp_path, monkeypatch) -> N
 
     with pytest.raises(MLPConfigSourceError, match="mlp-config\\[dotenv\\]"):
         DotEnvSource(env_file).load()
-
